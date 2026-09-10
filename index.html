@@ -52,7 +52,7 @@
       <label>Comprobante Adjunto <span id="reqArchivo" style="display:none; color:red;">*</span>:</label>
       <input type="file" id="archivoInput" accept="image/*,application/pdf">
     </div>
-    <button type="submit" id="btnSubmit">Enviar y Descargar PDF</button>
+    <button type="submit" id="btnSubmit">Enviar Solicitud</button>
   </form>
 
   <div id="msgError" class="alert error"></div>
@@ -60,9 +60,6 @@
 </div>
 
 <script>
-  // REEMPLAZAR CON TU URL DE APPS SCRIPT WEB APP
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxLViPh0IgH01vkoK2PYnx4gWg1lCU4cQq-aK7CETq4S-JHKcuHmWtiCccZBIIPovZE/exec";
-
   function toggleArchivo() {
     let esMedico = document.getElementById("esMedico").value;
     document.getElementById("reqArchivo").style.display = (esMedico === "SI") ? "inline" : "none";
@@ -85,7 +82,7 @@
     let msgError = document.getElementById("msgError");
     if (dias > 5) {
       msgError.style.display = "block";
-      msgError.innerText = `Límite excedido: Han transcurrido ${dias} días hábiles. Máximo permitido: 5 días hábiles.`;
+      msgError.innerText = `⚠️ Límite excedido: Han transcurrido ${dias} días hábiles. Máximo permitido: 5 días hábiles.`;
       document.getElementById("btnSubmit").disabled = true;
     } else {
       msgError.style.display = "none";
@@ -100,6 +97,7 @@
     let msgExito = document.getElementById("msgExito");
     
     btn.disabled = true;
+    btn.textContent = "Enviando...";
     msgError.style.display = "none";
     msgExito.style.display = "none";
 
@@ -120,32 +118,39 @@
       reader.onload = function(evt) {
         datos.archivoBase64 = evt.target.result;
         datos.archivoMimeType = fileInput.files[0].type;
-        procesarEnvio(datos);
+        procesarEnvio(datos, btn);
       };
       reader.readAsDataURL(fileInput.files[0]);
     } else {
-      procesarEnvio(datos);
+      procesarEnvio(datos, btn);
     }
   }
 
-  function procesarEnvio(datos) {
-    fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors", // Evita bloqueos de origen cruzado en Apps Script
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(datos)
-    })
-    .then(() => {
-      document.getElementById("msgExito").style.display = "block";
-      document.getElementById("msgExito").innerHTML = `Solicitud enviada correctamente. Si tus datos son válidos, el justificante se ha registrado en el sistema.`;
-      document.getElementById("formJustificante").reset();
-      document.getElementById("btnSubmit").disabled = false;
-    })
-    .catch(err => {
-      document.getElementById("msgError").style.display = "block";
-      document.getElementById("msgError").innerText = "Error al enviar: " + err;
-      document.getElementById("btnSubmit").disabled = false;
-    });
+  function procesarEnvio(datos, btn) {
+    // ✅ CAMBIO: Usamos google.script.run en lugar de fetch()
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        onSuccess(resultado, btn);
+      })
+      .withFailureHandler(function(error) {
+        onFailure(error, btn);
+      })
+      .procesarJustificante(datos);
+  }
+
+  function onSuccess(resultado, btn) {
+    document.getElementById("msgExito").style.display = "block";
+    document.getElementById("msgExito").innerHTML = `✅ ${resultado}`;
+    document.getElementById("formJustificante").reset();
+    btn.disabled = false;
+    btn.textContent = "Enviar Solicitud";
+  }
+
+  function onFailure(error, btn) {
+    document.getElementById("msgError").style.display = "block";
+    document.getElementById("msgError").innerText = `❌ Error: ${error}`;
+    btn.disabled = false;
+    btn.textContent = "Enviar Solicitud";
   }
 </script>
 </body>
