@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Solicitud de Justificante Escolar</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafc; padding: 20px; color: #0f172a; }
+    .card { max-width: 500px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 13px; }
+    input, select { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
+    button { background: #1e3a8a; color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    button:disabled { background: #94a3b8; }
+    .alert { padding: 10px; margin-top: 15px; border-radius: 4px; display: none; font-size: 13px; }
+    .error { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+    .exito { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Solicitud de Justificante</h2>
+  <form id="formJustificante" onsubmit="enviarDatos(event)">
+    <div class="form-group">
+      <label>Nombre Completo:</label>
+      <input type="text" id="nombreAlumno" required>
+    </div>
+    <div class="form-group">
+      <label>Matrícula / Grupo:</label>
+      <input type="text" id="matricula" required>
+    </div>
+    <div class="form-group">
+      <label>Primer Día a Justificar:</label>
+      <input type="date" id="fechaInicio" required>
+    </div>
+    <div class="form-group">
+      <label>Último Día a Justificar:</label>
+      <input type="date" id="fechaFin" required onchange="validarPlazo()">
+    </div>
+    <div class="form-group">
+      <label>¿Es cuestión médica?</label>
+      <select id="esMedico" onchange="toggleArchivo()">
+        <option value="NO">No</option>
+        <option value="SI">Sí</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Motivo:</label>
+      <input type="text" id="motivo" required>
+    </div>
+    <div class="form-group">
+      <label>Comprobante Adjunto <span id="reqArchivo" style="display:none; color:red;">*</span>:</label>
+      <input type="file" id="archivoInput" accept="image/*,application/pdf">
+    </div>
+    <button type="submit" id="btnSubmit">Enviar y Descargar PDF</button>
+  </form>
+
+  <div id="msgError" class="alert error"></div>
+  <div id="msgExito" class="alert exito"></div>
+</div>
+
+<script>
+  // REEMPLAZAR CON TU URL DE APPS SCRIPT WEB APP
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzyrfMkmO-O4W9Tnsl9Rh47PzcZewHkpTz2VCt6-6Wlp2Vi8KvSSq1ar29lCltrL7B/exec";
+
+  function toggleArchivo() {
+    let esMedico = document.getElementById("esMedico").value;
+    document.getElementById("reqArchivo").style.display = (esMedico === "SI") ? "inline" : "none";
+    document.getElementById("archivoInput").required = (esMedico === "SI");
+  }
+
+  function validarPlazo() {
+    let fFin = new Date(document.getElementById("fechaFin").value + "T00:00:00");
+    let hoy = new Date();
+    hoy.setHours(0,0,0,0);
+    
+    let dias = 0;
+    let temp = new Date(fFin);
+    temp.setDate(temp.getDate() + 1);
+    while (temp <= hoy) {
+      if (temp.getDay() !== 0 && temp.getDay() !== 6) dias++;
+      temp.setDate(temp.getDate() + 1);
+    }
+
+    let msgError = document.getElementById("msgError");
+    if (dias > 5) {
+      msgError.style.display = "block";
+      msgError.innerText = `Límite excedido: Han transcurrido ${dias} días hábiles. Máximo permitido: 5 días hábiles.`;
+      document.getElementById("btnSubmit").disabled = true;
+    } else {
+      msgError.style.display = "none";
+      document.getElementById("btnSubmit").disabled = false;
+    }
+  }
+
+  function enviarDatos(e) {
+    e.preventDefault();
+    let btn = document.getElementById("btnSubmit");
+    let msgError = document.getElementById("msgError");
+    let msgExito = document.getElementById("msgExito");
+    
+    btn.disabled = true;
+    msgError.style.display = "none";
+    msgExito.style.display = "none";
+
+    let datos = {
+      nombreAlumno: document.getElementById("nombreAlumno").value,
+      matricula: document.getElementById("matricula").value,
+      fechaInicio: document.getElementById("fechaInicio").value,
+      fechaFin: document.getElementById("fechaFin").value,
+      esMedico: document.getElementById("esMedico").value,
+      motivo: document.getElementById("motivo").value,
+      archivoBase64: null,
+      archivoMimeType: null
+    };
+
+    let fileInput = document.getElementById("archivoInput");
+    if (fileInput.files.length > 0) {
+      let reader = new FileReader();
+      reader.onload = function(evt) {
+        datos.archivoBase64 = evt.target.result;
+        datos.archivoMimeType = fileInput.files[0].type;
+        procesarEnvio(datos);
+      };
+      reader.readAsDataURL(fileInput.files[0]);
+    } else {
+      procesarEnvio(datos);
+    }
+  }
+
+  function procesarEnvio(datos) {
+    fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors", // Evita bloqueos de origen cruzado en Apps Script
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datos)
+    })
+    .then(() => {
+      document.getElementById("msgExito").style.display = "block";
+      document.getElementById("msgExito").innerHTML = `Solicitud enviada correctamente. Si tus datos son válidos, el justificante se ha registrado en el sistema.`;
+      document.getElementById("formJustificante").reset();
+      document.getElementById("btnSubmit").disabled = false;
+    })
+    .catch(err => {
+      document.getElementById("msgError").style.display = "block";
+      document.getElementById("msgError").innerText = "Error al enviar: " + err;
+      document.getElementById("btnSubmit").disabled = false;
+    });
+  }
+</script>
+</body>
+</html>
